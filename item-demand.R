@@ -207,3 +207,96 @@ plot4 <- more_plots[[2]]
 
 fig <- subplot(plot1, plot2, plot3, plot4, nrows = 2)
 fig
+
+
+
+# ------------------ SARIMA Models ----------------------
+
+library(tidymodels)
+library(tidyverse)
+library(modeltime)
+library(timetk)
+library(plotly)
+
+setwd("C:/Users/rileyw/Item-Demand-Challenge")
+
+train <- read_csv("train.csv")
+test <- read_csv("test.csv")
+
+train %>%
+  filter(store == 5, item == 18) -> store_item
+
+
+id_recipe <- recipe(sales ~ date, data = store_item) %>%
+  step_date(date, features = c('doy', 'dow', 'decimal')) %>%
+  step_range(date_doy, min = 0, max =pi) %>%
+  step_mutate(sinDOY = sin(date_doy), cosDOY = cos(date_doy))
+
+arima_mod <- arima_reg(seasonal_period = 60,
+                       non_seasonal_ar = 1, # default max p
+                       non_seasonal_ma = 1, # max q
+                       seasonal_ar = 1, # max P
+                       seasonal_ma = 1, # max Q
+                       non_seasonal_differences = 2, # max d
+                       seasonal_differences = 1) %>% # max D
+  set_engine("auto_arima")
+
+# For store_item combo of Store = 5 item = 18
+train %>%
+  filter(store == 5, item == 18) -> store_item
+
+cv_split <- time_series_split(store_item, assess = "3 months", cumulative = T)
+
+arima_wf <- workflow() %>%
+  add_recipe(id_recipe) %>%
+  add_model(arima_mod) %>%
+  fit(data = training(cv_split))
+
+cv_results <- modeltime_calibrate(arima_wf, 
+                                  new_data = testing(cv_split))
+cv_results %>%
+  modeltime_forecast(
+    new_data = testing(cv_split),
+    actual_data = store_item
+  ) %>%
+  plot_modeltime_forecast(.interactive = F) -> plot1
+
+arima_fullfit <- cv_results %>%
+  modeltime_refit(data = store_item)
+
+arima_fullfit %>%
+  modeltime_forecast(h = "3 months", actual_data = store_item) %>%
+  plot_modeltime_forecast(.interactive = F) -> plot2
+
+
+
+
+# For store_item combo of Store = 6 item = 12
+train %>%
+  filter(store == 6, item == 12) -> store_item
+
+cv_split <- time_series_split(store_item, assess = "3 months", cumulative = T)
+
+arima_wf <- workflow() %>%
+  add_recipe(id_recipe) %>%
+  add_model(arima_mod) %>%
+  fit(data = training(cv_split))
+
+cv_results <- modeltime_calibrate(arima_wf, 
+                                  new_data = testing(cv_split))
+cv_results %>%
+  modeltime_forecast(
+    new_data = testing(cv_split),
+    actual_data = store_item
+  ) %>%
+  plot_modeltime_forecast(.interactive = F) -> plot3
+
+arima_fullfit <- cv_results %>%
+  modeltime_refit(data = store_item)
+
+arima_fullfit %>%
+  modeltime_forecast(h = "3 months", actual_data = store_item) %>%
+  plot_modeltime_forecast(.interactive = F) -> plot4
+
+fig <- subplot(plot1, plot2, plot3, plot4, nrows = 2)
+fig
