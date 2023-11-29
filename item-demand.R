@@ -16,9 +16,9 @@ for(s in 1:nstores){
       filter(store==s, item==i)
     storeItemTest <- test %>%
       filter(store==s, item==i)
-    
-    
-    
+
+
+
     if(s == 1 & i == 1){
       all_preds <- preds
     }
@@ -128,7 +128,7 @@ es_mod <- exp_smoothing(
   set_engine("ets") %>%
   fit(sales ~ date, data = training(cv_split))
 
-cv_results <- modeltime_calibrate(es_mod, 
+cv_results <- modeltime_calibrate(es_mod,
                                   new_data = testing(cv_split))
 
 cv_results %>%
@@ -161,38 +161,38 @@ es_fullfit %>%
 plot_fun <- function(stores, items){
   train %>%
     filter(store == stores, item == items) -> train
-  
+
   cv_split <- time_series_split(train, assess = "3 months", cumulative = T)
-  
+
   cv_split %>%
     tk_time_series_cv_plan() %>%
     plot_time_series_cv_plan(date, sales, .interactive = F)
-  
+
   es_mod <- exp_smoothing() %>%
     set_engine("ets") %>%
     fit(sales ~ date, data = training(cv_split))
-  
-  cv_results <- modeltime_calibrate(es_mod, 
+
+  cv_results <- modeltime_calibrate(es_mod,
                                     new_data = testing(cv_split))
-  
+
   cv_results %>%
     modeltime_forecast(
       new_data = testing(cv_split),
       actual_data = train
     ) %>%
     plot_modeltime_forecast(.interactive = F) -> plot1
-  
+
   cv_results %>%
     modeltime_accuracy() %>%
     table_modeltime_accuracy(.interactive = F)
-  
+
   es_fullfit <- cv_results %>%
     modeltime_refit(data = train)
-  
+
   es_fullfit %>%
     modeltime_forecast(h = "3 months", actual_data = train) %>%
     plot_modeltime_forecast(.interactive = F) -> plot2
-  
+
   return(list(plot1, plot2))
 }
 
@@ -252,7 +252,7 @@ arima_wf <- workflow() %>%
   add_model(arima_mod) %>%
   fit(data = training(cv_split))
 
-cv_results <- modeltime_calibrate(arima_wf, 
+cv_results <- modeltime_calibrate(arima_wf,
                                   new_data = testing(cv_split))
 cv_results %>%
   modeltime_forecast(
@@ -282,7 +282,7 @@ arima_wf <- workflow() %>%
   add_model(arima_mod) %>%
   fit(data = training(cv_split))
 
-cv_results <- modeltime_calibrate(arima_wf, 
+cv_results <- modeltime_calibrate(arima_wf,
                                   new_data = testing(cv_split))
 cv_results %>%
   modeltime_forecast(
@@ -299,4 +299,77 @@ arima_fullfit %>%
   plot_modeltime_forecast(.interactive = F) -> plot4
 
 fig <- subplot(plot1, plot2, plot3, plot4, nrows = 2)
+fig
+
+# ------------ Facebooks Prophet --------------
+
+library(tidymodels)
+library(tidyverse)
+library(modeltime)
+library(timetk)
+library(plotly)
+
+train <- read_csv("train.csv")
+test <- read_csv("test.csv")
+
+id_recipe <- recipe(sales ~ date, data = store_item) %>%
+  step_date(date, features = c('doy', 'dow', 'decimal')) %>%
+  step_range(date_doy, min = 0, max =pi) %>%
+  step_mutate(sinDOY = sin(date_doy), cosDOY = cos(date_doy))
+
+# For store_item combo of Store = 5 item = 18
+train %>%
+  filter(store == 5, item == 18) -> store_item
+
+cv_split <- time_series_split(store_item, assess = "3 months", cumulative = T)
+
+prophet_mod <- prophet_reg() %>%
+  set_engine("prophet") %>%
+  fit(sales ~ date, data = training(cv_split))
+
+cv_results <- modeltime_calibrate(prophet_mod, new_data = testing(cv_split))
+
+cv_results %>%
+  modeltime_forecast(
+    new_data = testing(cv_split),
+    actual_data = store_item
+  ) %>%
+  plot_modeltime_forecast(.interactive = F) -> plot1
+
+prophet_fullfit <- cv_results %>%
+  modeltime_refit(data = store_item)
+
+prophet_fullfit %>%
+  modeltime_forecast(h = "3 months", actual_data = store_item) %>%
+  plot_modeltime_forecast(.interactive = F) -> plot2
+
+
+# For store_item combo of Store = 3 item = 1
+
+train %>%
+  filter(store == 5, item == 18) -> store_item
+
+cv_split <- time_series_split(store_item, assess = "3 months", cumulative = T)
+
+prophet_mod <- prophet_reg() %>%
+  set_engine("prophet") %>%
+  fit(sales ~ date, data = training(cv_split))
+
+cv_results <- modeltime_calibrate(prophet_mod, new_data = testing(cv_split))
+
+cv_results %>%
+  modeltime_forecast(
+    new_data = testing(cv_split),
+    actual_data = store_item
+  ) %>%
+  plot_modeltime_forecast(.interactive = F) -> plot3
+
+prophet_fullfit <- cv_results %>%
+  modeltime_refit(data = store_item)
+
+prophet_fullfit %>%
+  modeltime_forecast(h = "3 months", actual_data = store_item) %>%
+  plot_modeltime_forecast(.interactive = F) -> plot4
+
+fig <- subplot(plot1, plot3, plot2, plot4, nrows = 2)
 fig
